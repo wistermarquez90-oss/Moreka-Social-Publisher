@@ -1,0 +1,7 @@
+# Instalar en /etc/cron.d/moreka-content y ajustar la ruta si el proyecto no está en /opt/moreka.
+# La compuerta interna de 72 horas decide si corresponde preparar un lote nuevo.
+17 6 * * * root cd /opt/moreka && /usr/bin/docker compose run --rm worker >> /var/log/moreka-worker.log 2>&1
+# Revisa cada minuto los envíos autorizados; no ejecuta nada sin una programación previa.
+* * * * * root cd /opt/moreka && /usr/bin/docker compose run --rm publisher >> /var/log/moreka-publisher.log 2>&1
+# Respaldo diario de MySQL y archivos; conserva 14 días.
+35 3 * * * root /opt/moreka/scripts/backup-external.sh >> /var/log/moreka-backup.log 2>&1

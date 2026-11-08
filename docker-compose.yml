@@ -1,0 +1,81 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: moreka
+      MYSQL_USER: moreka
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.external
+    environment:
+      DATABASE_URL: mysql://moreka:${MYSQL_PASSWORD}@db:3306/moreka
+      LOCAL_STORAGE_DIR: /app/var/storage
+    volumes:
+      - moreka-files:/app/var/storage
+    ports:
+      - "${MOREKA_HTTP_PORT:-4377}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/trpc/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build: .
+    profiles: ["worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.external
+    environment:
+      DATABASE_URL: mysql://moreka:${MYSQL_PASSWORD}@db:3306/moreka
+      LOCAL_STORAGE_DIR: /app/var/storage
+    volumes:
+      - moreka-files:/app/var/storage
+    command: ["node", "dist-worker/content-worker.js"]
+
+  publisher:
+    build: .
+    profiles: ["worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.external
+    environment:
+      DATABASE_URL: mysql://moreka:${MYSQL_PASSWORD}@db:3306/moreka
+      LOCAL_STORAGE_DIR: /app/var/storage
+    volumes:
+      - moreka-files:/app/var/storage
+    command: ["node", "dist-worker/publishing-worker.js"]
+
+  setup:
+    build:
+      context: .
+      target: build
+    profiles: ["setup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.external
+    environment:
+      DATABASE_URL: mysql://moreka:${MYSQL_PASSWORD}@db:3306/moreka
+    command: ["npm", "run", "db:push"]
+
+volumes:
+  mysql-data:
+  moreka-files:
